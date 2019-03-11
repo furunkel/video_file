@@ -3,11 +3,11 @@
 
 #include <stddef.h>
 #include <stdio.h>
-#include <jpeglib.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libswscale/swscale.h>
 #include <pthread.h>
+#include <turbojpeg.h>
 
 #include "ailuro-video-file.h"
 
@@ -17,14 +17,10 @@ struct _AiluroThumbnailer
 {
   AiluroVideoFile *video_file;
 
-  struct jpeg_compress_struct compressor;
-  struct jpeg_error_mgr error_mgr;
-
   int width;
   int height;
   unsigned n;
 
-  char* setup_filename;
   AVFrame* frame;
   AVFrame** scaled_frames;
   AVFrame *joined_frame;
@@ -35,8 +31,10 @@ struct _AiluroThumbnailer
 
   struct SwsContext* sws_ctx;
 
+  tjhandle *tjInstance;
+
   int last_error;
-  char *last_error_str;
+  char last_error_str[1024];
 
 };
 

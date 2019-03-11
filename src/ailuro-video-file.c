@@ -12,6 +12,7 @@ ailuro_video_file_open_codec(AiluroVideoFile *video_file)
 
   DEBUG( "CODEC MUTEX: %p\n", video_file->codec_mutex);
   pthread_mutex_lock(&video_file->codec_mutex);
+  DEBUG( "CODEC MUTEX LOCKED: %p\n", video_file->codec_mutex);
   if(video_file->video_codec_context->codec == NULL)
   {
     DEBUG( "FIND DECODER\n");
@@ -148,7 +149,8 @@ ailuro_video_file_init(AiluroVideoFile *video_file, const char *filename)
   return true;
 
 fail:
-  video_file->last_errno = errno;
+  video_file->last_error = errno;
+  video_file->last_error_str = strerror(errno);
   WARN( "VideoFile creation failed\n");
   return false;
 

@@ -2,7 +2,7 @@
 #include "ailuro-core.h"
 #include <libavutil/imgutils.h>
 
-#include <turbojpeg.h>
+#define FRAME_ALIGN 16
 
 static void
 planes_to_jpeg(AiluroThumbnailer* thumbnailer,
@@ -29,8 +29,13 @@ ailuro_thumbnailer_destroy(AiluroThumbnailer* thumbnailer)
   av_free(thumbnailer->scaled_frames_buffer);
   av_free(thumbnailer->joined_frames_buffer);
 
-  if (thumbnailer->setup_filename)
-    free(thumbnailer->setup_filename);
+  tjDestroy(thumbnailer->tjInstance);
+}
+
+static void set_tj_error(AiluroThumbnailer *thumbnailer) {
+  thumbnailer->last_error = tjGetErrorCode(thumbnailer->tjInstance);
+  strncpy(thumbnailer->last_error_str, tjGetErrorStr2(thumbnailer->tjInstance), sizeof(thumbnailer->last_error_str));
+  DEBUG("JPEG error: %s\n", thumbnailer->last_error_str);
 }
 
 bool
@@ -46,7 +51,7 @@ ailuro_thumbnailer_init(AiluroThumbnailer* thumbnailer,
   thumbnailer->video_file = file;
   thumbnailer->width = width;
   thumbnailer->position = -1;
-  thumbnailer->setup_filename = strdup(file->filename);
+
   if (n <= 0)
     n = 1;
 
@@ -101,20 +106,20 @@ ailuro_thumbnailer_init(AiluroThumbnailer* thumbnailer,
 
   thumbnailer->scaled_frames = av_mallocz_array(n, sizeof(AVFrame*));
   size_t frame_size =
-    (size_t) av_image_get_buffer_size(AV_PIX_FMT_YUV444P, width, height, 1);
+    (size_t) av_image_get_buffer_size(AV_PIX_FMT_YUV444P, width, height, FRAME_ALIGN);
   buffer_size = n * frame_size;
   thumbnailer->scaled_frames_buffer = av_mallocz((size_t)buffer_size);
 
   thumbnailer->joined_frame = av_frame_alloc();
 
   int joined_buffer_size =
-    av_image_get_buffer_size(AV_PIX_FMT_YUV444P, width * (int)n, height, 1);
+    av_image_get_buffer_size(AV_PIX_FMT_YUV444P, width * (int)n, height, FRAME_ALIGN);
   thumbnailer->joined_frames_buffer = av_mallocz((size_t)joined_buffer_size);
 
     av_image_fill_arrays(thumbnailer->joined_frame->data,
                          thumbnailer->joined_frame->linesize,
                          thumbnailer->joined_frames_buffer,
-                         AV_PIX_FMT_YUV444P, width * (int)n, height, 1);
+                         AV_PIX_FMT_YUV444P, width * (int)n, height, FRAME_ALIGN);
 
 
   for (i = 0; i < n; i++) {
@@ -126,30 +131,26 @@ ailuro_thumbnailer_init(AiluroThumbnailer* thumbnailer,
                          AV_PIX_FMT_YUV444P,
                          width,
                          height,
-                         1);
+                         FRAME_ALIGN);
   }
 
-//  thumbnailer->compressor.err = jpeg_std_error(&thumbnailer->error_mgr);
-//  jpeg_create_compress(&(thumbnailer->compressor));
-//  thumbnailer->compressor.image_width =
-//    (JDIMENSION)(thumbnailer->n * (size_t)width);
-//  thumbnailer->compressor.image_height = (JDIMENSION)(height - height % 8);
-//  thumbnailer->compressor.input_components = 3;
-//  jpeg_set_defaults(&(thumbnailer->compressor));
-//  jpeg_set_colorspace(&thumbnailer->compressor, JCS_YCbCr);
-//  thumbnailer->compressor.raw_data_in = TRUE;
-
-  // ???
-  //  if(file->video_codec_context->time_base.num > 1000 &&
-  //  file->video_codec_context->time_base.den == 1) {
-  //    file->video_codec_context->time_base.den = 1000;
-  //  }
+  thumbnailer->tjInstance = tjInitCompress();
+  if (thumbnailer->tjInstance == NULL) {
+    set_tj_error(thumbnailer);
+    goto fail;
+  }
 
   return thumbnailer;
 
 fail:
   DEBUG("Thumbnailer creation failed\n");
   return NULL;
+}
+
+static void
+set_av_error(AiluroThumbnailer* thumbnailer, int error) {
+    thumbnailer->last_error = error;
+    av_strerror(error, thumbnailer->last_error_str, sizeof(thumbnailer->last_error_str));
 }
 
 int
@@ -180,11 +181,6 @@ ailuro_thumbnailer_get_frame(AiluroThumbnailer* thumbnailer,
 
   fprintf(stderr, "FILTER MONOTONY: %d\n", filter_monoton);
 
-  if (strcmp(thumbnailer->setup_filename, file->filename)) {
-    DEBUG("Filename mismatch");
-    goto fail;
-  }
-
   ailuro_video_file_open_codec(file);
 
   // packet = &_packet;
@@ -204,12 +200,6 @@ ailuro_thumbnailer_get_frame(AiluroThumbnailer* thumbnailer,
     goto fail;
   }
 
-  // video_stream_position = av_rescale_q(position, AV_TIME_BASE_Q,
-  // *video_stream_time_base);
-
-  //  keyint_length = 100 * AV_TIME_BASE * video_stream_fps->den /
-  //  video_stream_fps->num; video_stream_keyint_length =
-  //  av_rescale_q(keyint_length, AV_TIME_BASE_Q, *video_stream_time_base);
 
   if (format_context->start_time != AV_NOPTS_VALUE)
     position += format_context->start_time;
@@ -217,23 +207,28 @@ ailuro_thumbnailer_get_frame(AiluroThumbnailer* thumbnailer,
   int frames_not_taken_because_of_monoty = 0;
 
   int64_t video_position = av_rescale_q(position, AV_TIME_BASE_Q, file->video_stream->time_base);
+  int64_t seek_position = video_position;
+
+reseek:;
+
+  DEBUG( "RESEEK\n");
 
   while (!before_frame) {
-    if (thumbnailer->position == -1 || (thumbnailer->position > video_position)) {
       DEBUG("Seeking to : %ld %ld\n", position, position);
       int ret = avformat_seek_file(format_context,
-                                   -1,
+                                   video_stream_index, //-1,
                                    0,
-                                   position,
-                                   position,
+                                   seek_position,
+                                   seek_position,
                                    0);
-      DEBUG("return: %ld\n", ret);
+      DEBUG("return: %d\n", ret);
       //      position = MAX(0, position - keyint_length);
 
       while (!have_probe_packet) {
-        if (av_read_frame(format_context, packet) < 0) {
-          DEBUG("read frame error\n", ret);
-          break;
+        int ret = av_read_frame(format_context, packet);
+        if (ret < 0) {
+          set_av_error(thumbnailer, ret);
+          goto fail;
         }
         have_probe_packet = (packet->stream_index == video_stream_index &&
                              packet->pts != AV_NOPTS_VALUE);
@@ -246,56 +241,91 @@ ailuro_thumbnailer_get_frame(AiluroThumbnailer* thumbnailer,
       /* Once reached this packet is the allocated probe packet*/
       DEBUG("behind_frame packet: %ld <= %ld\n", packet->pts, video_position);
       before_frame = packet->pts <= video_position;
-    }
   }
 
+  DEBUG("before frame found\n");
+  bool first_decoded_frame = true;
+  have_probe_packet = false;
+
   while (before_frame && !done) {
-    if (packet->stream_index == video_stream_index && packet->pts != AV_NOPTS_VALUE && packet->pts >= video_position) {
+    int prev_packet_pts = AV_NOPTS_VALUE;
+    if (packet->stream_index == video_stream_index) {
       int ret;
       ret = avcodec_send_packet(codec_context, packet);
-      DEBUG("send ret: %d\n", ret);
+      DEBUG("send ret: %d (ts: %ld)\n", ret, packet->pts);
       if(ret < 0) {
-          goto next_frame;
+          if(ret == AVERROR(EAGAIN) || ret == AVERROR_INVALIDDATA) {
+            goto next_frame;
+          } else {
+            set_av_error(thumbnailer, ret);
+            goto fail;
+          }
       }
 
-      ret = avcodec_receive_frame(codec_context, frame);
-      if(ret == -EAGAIN) {
-          goto next_frame;
-      }
-      DEBUG("recv ret: %d\n", ret);
-
-      clock_t c = clock();
-      DEBUG("decode: %lf\n", (double)(clock() - c) / CLOCKS_PER_SEC);
-      DEBUG("GOT_FRAME! (%d/%d): %lld\n", n, thumbnailer->n, frame->pts);
-
-      sws_scale(thumbnailer->sws_ctx,
-                (const uint8_t* const*)frame->data,
-                frame->linesize,
-                0,
-                codec_context->height,
-                (uint8_t* const*)thumbnailer->scaled_frames[n]->data,
-                thumbnailer->scaled_frames[n]->linesize);
-
-      DEBUG("scale: %lf\n", (double)(clock() - c) / CLOCKS_PER_SEC);
-
-      if (filter_monoton) {
-        int64_t monotony =
-          frame_monotony(thumbnailer, thumbnailer->scaled_frames[n]);
-        DEBUG("MONOTONY: %lld\n", monotony);
-
-        if (monotony < 40000 && frames_not_taken_because_of_monoty < 125) {
-          frames_not_taken_because_of_monoty++;
-          goto next_frame;
+        ret = avcodec_receive_frame(codec_context, frame);
+        if(ret < 0) {
+            if(ret == AVERROR(EAGAIN)) {
+              goto next_frame;
+            } else {
+              set_av_error(thumbnailer, ret);
+              goto fail;
+            }
         }
-      }
 
-      frames_not_taken_because_of_monoty = 0;
-      n++;
-      DEBUG("FRAMES: %ld/%ld\n", n, thumbnailer->n);
-      if (n == thumbnailer->n) {
-        done = 1;
-      }
+      if(packet->pts != AV_NOPTS_VALUE && packet->pts >= video_position) {
+        DEBUG("possible decode frame %ld\n", packet->pts);
+
+        if(first_decoded_frame) {
+            if(packet->pts > video_position && !(prev_packet_pts < video_position)) {
+              DEBUG("FIRST DECODED FRAME IS BEYOND target pos: %ld > %ld\n", packet->pts, video_position);
+              int64_t seek_delta = av_rescale_q(5 * AV_TIME_BASE, AV_TIME_BASE_Q, file->video_stream->time_base);
+              DEBUG("reseeking, old seek pos: %ld", seek_position);
+              seek_position = MAX(0, seek_position - seek_delta);
+              DEBUG("reseeking, new seek pos: %ld", seek_position);
+              before_frame = false;
+              av_packet_unref(packet);
+              avcodec_flush_buffers(codec_context);
+              goto reseek;
+            } else {
+              first_decoded_frame = false;
+            }
+        }
+        DEBUG("recv ret: %d\n", ret);
+
+        clock_t c = clock();
+        DEBUG("decode: %lf\n", (double)(clock() - c) / CLOCKS_PER_SEC);
+        DEBUG("GOT_FRAME! (%d/%d): %lld\n", n, thumbnailer->n, frame->pts);
+
+        sws_scale(thumbnailer->sws_ctx,
+                  (const uint8_t* const*)frame->data,
+                  frame->linesize,
+                  0,
+                  codec_context->height,
+                  (uint8_t* const*)thumbnailer->scaled_frames[n]->data,
+                  thumbnailer->scaled_frames[n]->linesize);
+
+        DEBUG("scale: %lf\n", (double)(clock() - c) / CLOCKS_PER_SEC);
+
+        if (filter_monoton) {
+          int64_t monotony =
+            frame_monotony(thumbnailer, thumbnailer->scaled_frames[n]);
+          DEBUG("MONOTONY: %lld\n", monotony);
+
+          if (monotony < 40000 && frames_not_taken_because_of_monoty < 125) {
+            frames_not_taken_because_of_monoty++;
+            goto next_frame;
+          }
+        }
+
+        frames_not_taken_because_of_monoty = 0;
+        n++;
+        DEBUG("FRAMES: %ld/%ld\n", n, thumbnailer->n);
+        if (n == thumbnailer->n) {
+          done = 1;
+        }
     }
+    prev_packet_pts = packet->pts;
+  }
 
   next_frame:
     av_packet_unref(packet);
@@ -304,7 +334,7 @@ ailuro_thumbnailer_get_frame(AiluroThumbnailer* thumbnailer,
         break;
       }
     }
-    thumbnailer->position = packet->pts;
+    //thumbnailer->position = packet->pts;
   }
   DEBUG("encoding as jpeg...\n\n\n");
 
@@ -325,20 +355,17 @@ planes_to_jpeg(AiluroThumbnailer* thumbnailer,
                size_t* size)
 {
 
-  tjhandle tjInstance = NULL;
+  tjhandle tjInstance = thumbnailer->tjInstance;
   int flags = TJFLAG_FASTDCT;
 
-  tjInstance = tjInitCompress();
-  if (tjInstance == NULL) {
-    goto error;
-  }
+
 
   // join frames
 
   for (unsigned i = 0; i < 3; i++) {
     size_t off = 0;
     for (unsigned j = 0; j < thumbnailer->n; j++) {
-      av_image_copy_plane(thumbnailer->joined_frame->data[i] + (j + 1) * thumbnailer->width,
+      av_image_copy_plane(thumbnailer->joined_frame->data[i] + (j) * thumbnailer->width,
                           thumbnailer->joined_frame->linesize[i],
                           thumbnailer->scaled_frames[j]->data[i],
                           thumbnailer->scaled_frames[j]->linesize[i],
@@ -366,13 +393,9 @@ planes_to_jpeg(AiluroThumbnailer* thumbnailer,
                                       quality,
                                       flags);
   if (error < 0) {
-    thumbnailer->last_error = error;
-    thumbnailer->last_error_str = tjGetErrorStr2(tjInstance);
-    DEBUG("JPEG error: %s\n", thumbnailer->last_error_str);
+    set_tj_error(thumbnailer);
     goto error;
   }
-  tjDestroy(tjInstance);
-  tjInstance = NULL;
 
   return;
 error:

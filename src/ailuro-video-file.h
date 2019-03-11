@@ -32,7 +32,8 @@ struct _AiluroVideoFile
     double par;
   } metadata;
 
-  int last_errno;
+  int last_error;
+  char *last_error_str;
 };
 
 bool

@@ -39,7 +39,7 @@ VALUE video_file_m_initialize(VALUE self, VALUE path)
     AiluroVideoFile *video_file;
     TypedData_Get_Struct(self, AiluroVideoFile, &video_file_type, video_file);
     if(!ailuro_video_file_init(video_file, StringValueCStr(path))) {
-        rb_raise(rb_eArgError, "%s", strerror(video_file->last_errno));
+        rb_raise(rb_eArgError, "%s", video_file->last_error_str);
     }
     return self;
 }
@@ -135,7 +135,7 @@ VALUE thumbnailer_m_initialize(VALUE self, VALUE rb_video_file, VALUE rb_width, 
     unsigned n = FIX2UINT(rb_n);
 
     if(!ailuro_thumbnailer_init(&thumbnailer->thumbnailer, video_file, width, n)) {
-        rb_raise(rb_eArgError, "%s", strerror(thumbnailer->thumbnailer.last_error));
+        rb_raise(rb_eRuntimeError, "%s", thumbnailer->thumbnailer.last_error_str);
     }
     return self;
 }
@@ -158,6 +158,7 @@ VALUE thumbnailer_m_get(VALUE self, VALUE rb_second, VALUE rb_filter_monoton) {
       free(data);
       return rb_data;
     } else {
+        rb_raise(rb_eArgError, "%s", thumbnailer->thumbnailer.last_error_str);
         return Qnil;
     }
 }
