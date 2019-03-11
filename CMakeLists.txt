@@ -3,7 +3,7 @@ project(video_file)
 find_package(PkgConfig REQUIRED)
 
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -pthread")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
 set(SOURCE_FILES 
 src/ext.c
 src/ailuro-core.c

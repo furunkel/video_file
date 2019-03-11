@@ -166,40 +166,28 @@ ailuro_thumbnailer_get_frame(AiluroThumbnailer* thumbnailer,
   AVCodecContext* codec_context;
   AiluroVideoFile* file = thumbnailer->video_file;
 
-  //  int64_t video_stream_position;
-  int got_frame = 0;
   int done = 0;
   int before_frame = 0;
   int have_probe_packet = 0;
 
   unsigned n = 0;
-  //  int64_t keyint_length;
-  //  int64_t video_stream_keyint_length;
   int video_stream_index;
-  //  AVRational *video_stream_time_base;
-  //  AVRational *video_stream_fps;
 
   fprintf(stderr, "FILTER MONOTONY: %d\n", filter_monoton);
 
   ailuro_video_file_open_codec(file);
 
-  // packet = &_packet;
   packet = &thumbnailer->packet;
 
   format_context = file->format_context;
   codec_context = file->video_codec_context;
-  // video_stream_time_base = &file->video_stream->time_base;
-  //  video_stream_fps = &file->video_stream->r_frame_rate;
   video_stream_index = file->video_stream->index;
   frame = thumbnailer->frame;
-
-  //  file->audio_stream->discard = AVDISCARD_ALL;
 
   int64_t position = (int64_t)(AV_TIME_BASE * seconds);
   if (format_context->duration < position || position < 0) {
     goto fail;
   }
-
 
   if (format_context->start_time != AV_NOPTS_VALUE)
     position += format_context->start_time;
@@ -248,7 +236,7 @@ reseek:;
   have_probe_packet = false;
 
   while (before_frame && !done) {
-    int prev_packet_pts = AV_NOPTS_VALUE;
+    int64_t prev_packet_pts = AV_NOPTS_VALUE;
     if (packet->stream_index == video_stream_index) {
       int ret;
       ret = avcodec_send_packet(codec_context, packet);
@@ -294,7 +282,7 @@ reseek:;
 
         clock_t c = clock();
         DEBUG("decode: %lf\n", (double)(clock() - c) / CLOCKS_PER_SEC);
-        DEBUG("GOT_FRAME! (%d/%d): %lld\n", n, thumbnailer->n, frame->pts);
+        DEBUG("GOT_FRAME! (%d/%d): %ld\n", n, thumbnailer->n, frame->pts);
 
         sws_scale(thumbnailer->sws_ctx,
                   (const uint8_t* const*)frame->data,
@@ -309,7 +297,7 @@ reseek:;
         if (filter_monoton) {
           int64_t monotony =
             frame_monotony(thumbnailer, thumbnailer->scaled_frames[n]);
-          DEBUG("MONOTONY: %lld\n", monotony);
+          DEBUG("MONOTONY: %ld\n", monotony);
 
           if (monotony < 40000 && frames_not_taken_because_of_monoty < 125) {
             frames_not_taken_because_of_monoty++;
@@ -319,7 +307,7 @@ reseek:;
 
         frames_not_taken_because_of_monoty = 0;
         n++;
-        DEBUG("FRAMES: %ld/%ld\n", n, thumbnailer->n);
+        DEBUG("FRAMES: %u/%u\n", n, thumbnailer->n);
         if (n == thumbnailer->n) {
           done = 1;
         }
@@ -365,7 +353,7 @@ planes_to_jpeg(AiluroThumbnailer* thumbnailer,
   for (unsigned i = 0; i < 3; i++) {
     size_t off = 0;
     for (unsigned j = 0; j < thumbnailer->n; j++) {
-      av_image_copy_plane(thumbnailer->joined_frame->data[i] + (j) * thumbnailer->width,
+      av_image_copy_plane(thumbnailer->joined_frame->data[i] + j * (unsigned) thumbnailer->width,
                           thumbnailer->joined_frame->linesize[i],
                           thumbnailer->scaled_frames[j]->data[i],
                           thumbnailer->scaled_frames[j]->linesize[i],
@@ -380,11 +368,9 @@ planes_to_jpeg(AiluroThumbnailer* thumbnailer,
   int* strides = thumbnailer->joined_frame->linesize;
   *rdata = NULL;
 
-  fprintf(stderr, "%p, %p\n", planes, planes[0]);
-
   int error = tjCompressFromYUVPlanes(tjInstance,
                                       planes,
-                                      thumbnailer->n * thumbnailer->width,
+                                      (int) (thumbnailer->n * thumbnailer->width),
                                       strides,
                                       thumbnailer->height,
                                       TJSAMP_444,

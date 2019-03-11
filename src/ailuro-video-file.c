@@ -10,9 +10,9 @@ ailuro_video_file_open_codec(AiluroVideoFile *video_file)
   AVCodec *codec;
   int ret;
 
-  DEBUG( "CODEC MUTEX: %p\n", video_file->codec_mutex);
+  DEBUG( "CODEC MUTEX\n");
   pthread_mutex_lock(&video_file->codec_mutex);
-  DEBUG( "CODEC MUTEX LOCKED: %p\n", video_file->codec_mutex);
+  DEBUG( "CODEC MUTEX LOCKED\n");
   if(video_file->video_codec_context->codec == NULL)
   {
     DEBUG( "FIND DECODER\n");
