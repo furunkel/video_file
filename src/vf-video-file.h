@@ -6,9 +6,9 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-typedef struct _AiluroVideoFile AiluroVideoFile;
+typedef struct _VfFile VfFile;
 
-struct _AiluroVideoFile
+struct _VfFile
 {
   AVFormatContext* format_context;
   AVCodecContext* video_codec_context;
@@ -37,10 +37,10 @@ struct _AiluroVideoFile
 };
 
 bool
-ailuro_video_file_init(AiluroVideoFile *video_file, const char* filename);
+vf_file_init(VfFile *video_file, const char* filename);
 
 int
-ailuro_video_file_open_codec(AiluroVideoFile* video_file);
+vf_file_open_codec(VfFile* video_file);
 
 void
-ailuro_video_file_destroy(AiluroVideoFile* video_file);
+vf_file_destroy(VfFile* video_file);

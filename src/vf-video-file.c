@@ -1,11 +1,11 @@
 //#include <glib.h>
 
-#include "ailuro-video-file.h"
-#include "ailuro-core.h"
+#include "vf-video-file.h"
+#include "vf-core.h"
 #include <pthread.h>
 
 int
-ailuro_video_file_open_codec(AiluroVideoFile *video_file)
+vf_file_open_codec(VfFile *video_file)
 {
   AVCodec *codec;
   int ret;
@@ -38,7 +38,7 @@ ailuro_video_file_open_codec(AiluroVideoFile *video_file)
 
 
 void
-ailuro_video_file_destroy(AiluroVideoFile *video_file)
+vf_file_destroy(VfFile *video_file)
 {
   pthread_mutex_lock(&video_file->codec_mutex);
   if(video_file->video_codec_context != NULL)
@@ -57,7 +57,7 @@ ailuro_video_file_destroy(AiluroVideoFile *video_file)
 }
 
 static void
-ailuro_video_file_load_metadata(AiluroVideoFile *file)
+vf_file_load_metadata(VfFile *file)
 {
   int dar_num;
   int dar_den;
@@ -79,7 +79,7 @@ ailuro_video_file_load_metadata(AiluroVideoFile *file)
 }
 
 bool
-ailuro_video_file_init(AiluroVideoFile *video_file, const char *filename)
+vf_file_init(VfFile *video_file, const char *filename)
 {
   AVFormatContext *format_context = NULL;
   AVCodecContext *video_codec_context = NULL;
@@ -144,7 +144,7 @@ ailuro_video_file_init(AiluroVideoFile *video_file, const char *filename)
   video_file->audio_stream = audio_stream;
   video_file->video_stream = video_stream;
 
-  ailuro_video_file_load_metadata(video_file);
+  vf_file_load_metadata(video_file);
 
   return true;
 

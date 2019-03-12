@@ -1,16 +1,16 @@
 #include <ruby.h>
-#include "ailuro-video-file.h"
-#include "ailuro-thumbnailer.h"
+#include "vf-video-file.h"
+#include "vf-thumbnailer.h"
 
 void video_file_free(void* data)
 {
-    ailuro_video_file_destroy(data);
+    vf_file_destroy(data);
     free(data);
 }
 
 size_t video_file_size(const void* _data)
 {
-    return sizeof(AiluroVideoFile);
+    return sizeof(VfFile);
 }
 
 static const rb_data_type_t video_file_type = {
@@ -27,7 +27,7 @@ static const rb_data_type_t video_file_type = {
 VALUE video_file_alloc(VALUE self)
 {
     /* allocate */
-    AiluroVideoFile *video_file = RB_ZALLOC(AiluroVideoFile);
+    VfFile *video_file = RB_ZALLOC(VfFile);
     /* wrap */
     return TypedData_Wrap_Struct(self, &video_file_type, video_file);
 }
@@ -36,9 +36,9 @@ VALUE video_file_m_initialize(VALUE self, VALUE path)
 {
     Check_Type(path, T_STRING);
 
-    AiluroVideoFile *video_file;
-    TypedData_Get_Struct(self, AiluroVideoFile, &video_file_type, video_file);
-    if(!ailuro_video_file_init(video_file, StringValueCStr(path))) {
+    VfFile *video_file;
+    TypedData_Get_Struct(self, VfFile, &video_file_type, video_file);
+    if(!vf_file_init(video_file, StringValueCStr(path))) {
         rb_raise(rb_eArgError, "%s", video_file->last_error_str);
     }
     return self;
@@ -46,23 +46,23 @@ VALUE video_file_m_initialize(VALUE self, VALUE path)
 
 
 //VALUE video_file_m_duration(VALUE self) {
-//  AiluroVideoFile *video_file;
-//  TypedData_Get_Struct(self, AiluroVideoFile, &video_file_type, video_file);
+//  vfVideoFile *video_file;
+//  TypedData_Get_Struct(self, vfVideoFile, &video_file_type, video_file);
 
 //  return rb_float_new(video_file->metadata.duration);
 //}
 
 #define VIDEO_FILE_DECL_METADATA_READER_INT(name) \
   VALUE video_file_m_ ## name (VALUE self) { \
-    AiluroVideoFile *video_file; \
-    TypedData_Get_Struct(self, AiluroVideoFile, &video_file_type, video_file); \
+    VfFile *video_file; \
+    TypedData_Get_Struct(self, VfFile, &video_file_type, video_file); \
     return INT2FIX(video_file->metadata . name); \
   }
 
 #define VIDEO_FILE_DECL_METADATA_READER_FLOAT(name) \
   VALUE video_file_m_ ## name (VALUE self) { \
-    AiluroVideoFile *video_file; \
-    TypedData_Get_Struct(self, AiluroVideoFile, &video_file_type, video_file); \
+    VfFile *video_file; \
+    TypedData_Get_Struct(self, VfFile, &video_file_type, video_file); \
     return rb_float_new(video_file->metadata . name); \
   }
 
@@ -77,7 +77,7 @@ VIDEO_FILE_DECL_METADATA_READER_INT(height)
 
 
 typedef struct {
-  AiluroThumbnailer thumbnailer;
+  VfThumbnailer thumbnailer;
   VALUE video_file;
 } Thumbnailer;
 
@@ -92,13 +92,13 @@ void thumbnailer_mark(void* data)
 
 void thumbnailer_free(void* data)
 {
-    ailuro_thumbnailer_destroy(data);
+    vf_thumbnailer_destroy(data);
     free(data);
 }
 
 size_t thumbnailer_size(const void* _data)
 {
-    return sizeof(AiluroThumbnailer);
+    return sizeof(VfThumbnailer);
 }
 
 static const rb_data_type_t thumbnailer_type = {
@@ -127,14 +127,14 @@ VALUE thumbnailer_m_initialize(VALUE self, VALUE rb_video_file, VALUE rb_width, 
     Check_TypedStruct(rb_video_file, &video_file_type);
 
     Thumbnailer *thumbnailer;
-    AiluroVideoFile *video_file;
+    VfFile *video_file;
     TypedData_Get_Struct(self, Thumbnailer, &thumbnailer_type, thumbnailer);
-    TypedData_Get_Struct(rb_video_file, AiluroVideoFile, &video_file_type, video_file);
+    TypedData_Get_Struct(rb_video_file, VfFile, &video_file_type, video_file);
 
     int width = FIX2INT(rb_width);
     unsigned n = FIX2UINT(rb_n);
 
-    if(!ailuro_thumbnailer_init(&thumbnailer->thumbnailer, video_file, width, n)) {
+    if(!vf_thumbnailer_init(&thumbnailer->thumbnailer, video_file, width, n)) {
         rb_raise(rb_eRuntimeError, "%s", thumbnailer->thumbnailer.last_error_str);
     }
     return self;
@@ -152,7 +152,7 @@ VALUE thumbnailer_m_get(VALUE self, VALUE rb_second, VALUE rb_filter_monoton, VA
     Thumbnailer *thumbnailer;
     TypedData_Get_Struct(self, Thumbnailer, &thumbnailer_type, thumbnailer);
 
-    bool succ = ailuro_thumbnailer_get_frame(&thumbnailer->thumbnailer, second, &data, &size, filter_monoton, accurate);
+    bool succ = vf_thumbnailer_get_frame(&thumbnailer->thumbnailer, second, &data, &size, filter_monoton, accurate);
 
     if(size > 0 && data != NULL) {
       VALUE rb_data = rb_str_new((char *) data, size);
@@ -168,22 +168,22 @@ void Init_libvideo_file()
 {
     /* ... */
 
-    VALUE mAiluro = rb_define_module("Ailuro");
-    VALUE cVideoFile = rb_define_class_under(mAiluro, "VideoFile", rb_cData);
+    VALUE mVideoFile = rb_define_module("VideoFile");
+    VALUE cFile = rb_define_class_under(mVideoFile, "File", rb_cData);
 
-    rb_define_alloc_func(cVideoFile, video_file_alloc);
-    rb_define_method(cVideoFile, "initialize", video_file_m_initialize, 1);
+    rb_define_alloc_func(cFile, video_file_alloc);
+    rb_define_method(cFile, "initialize", video_file_m_initialize, 1);
 
-    rb_define_method(cVideoFile, "duration", video_file_m_duration, 0);
-    rb_define_method(cVideoFile, "fps", video_file_m_fps, 0);
-    rb_define_method(cVideoFile, "dar", video_file_m_dar, 0);
-    rb_define_method(cVideoFile, "par", video_file_m_par, 0);
+    rb_define_method(cFile, "duration", video_file_m_duration, 0);
+    rb_define_method(cFile, "fps", video_file_m_fps, 0);
+    rb_define_method(cFile, "dar", video_file_m_dar, 0);
+    rb_define_method(cFile, "par", video_file_m_par, 0);
 
-    rb_define_method(cVideoFile, "width", video_file_m_width, 0);
-    rb_define_method(cVideoFile, "height", video_file_m_height, 0);
+    rb_define_method(cFile, "width", video_file_m_width, 0);
+    rb_define_method(cFile, "height", video_file_m_height, 0);
 
 
-    VALUE cThumbnailer = rb_define_class_under(mAiluro, "Thumbnailer", rb_cData);
+    VALUE cThumbnailer = rb_define_class_under(mVideoFile, "Thumbnailer", rb_cData);
     rb_define_alloc_func(cThumbnailer, thumbnailer_alloc);
     rb_define_method(cThumbnailer, "initialize", thumbnailer_m_initialize, 3);
     rb_define_method(cThumbnailer, "get", thumbnailer_m_get, 3);

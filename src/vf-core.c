@@ -1,7 +1,7 @@
-#include "ailuro-core.h"
+#include "vf-core.h"
 
 void 
-ailuro_core_init()
+vf_core_init()
 { 
 //  g_thread_init(NULL);
 //  av_register_all();

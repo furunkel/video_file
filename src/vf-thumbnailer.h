@@ -9,13 +9,13 @@
 #include <pthread.h>
 #include <turbojpeg.h>
 
-#include "ailuro-video-file.h"
+#include "vf-video-file.h"
 
-typedef struct _AiluroThumbnailer AiluroThumbnailer;
+typedef struct _VfThumbnailer VfThumbnailer;
 
-struct _AiluroThumbnailer
+struct _VfThumbnailer
 {
-  AiluroVideoFile *video_file;
+  VfFile *video_file;
 
   int width;
   int height;
@@ -39,10 +39,10 @@ struct _AiluroThumbnailer
 };
 
 bool
-ailuro_thumbnailer_init(AiluroThumbnailer *thumbnailer, AiluroVideoFile* file, int width, unsigned n);
+vf_thumbnailer_init(VfThumbnailer *thumbnailer, VfFile* file, int width, unsigned n);
 
 bool
-ailuro_thumbnailer_get_frame(AiluroThumbnailer* thumbnailer,
+vf_thumbnailer_get_frame(VfThumbnailer* thumbnailer,
                              double seconds,
                              unsigned char** data,
                              size_t* size,
@@ -50,4 +50,4 @@ ailuro_thumbnailer_get_frame(AiluroThumbnailer* thumbnailer,
                              bool accurate);
 
 void
-ailuro_thumbnailer_destroy(AiluroThumbnailer* thumbnailer);
+vf_thumbnailer_destroy(VfThumbnailer* thumbnailer);

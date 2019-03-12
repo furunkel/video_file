@@ -6,14 +6,14 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
 set(SOURCE_FILES 
 src/ext.c
-src/ailuro-core.c
-src/ailuro-core.h
-src/ailuro-thumbnailer.c
-src/ailuro-thumbnailer.h
-src/ailuro-util.c
-src/ailuro-util.h
-src/ailuro-video-file.c
-src/ailuro-video-file.h
+src/vf-core.c
+src/vf-core.h
+src/vf-thumbnailer.c
+src/vf-thumbnailer.h
+src/vf-util.c
+src/vf-util.h
+src/vf-video-file.c
+src/vf-video-file.h
 )
 
 pkg_check_modules(LIBAV REQUIRED libavutil libavformat libavcodec libswscale)

@@ -1,20 +1,20 @@
-#include "ailuro-thumbnailer.h"
-#include "ailuro-core.h"
+#include "vf-thumbnailer.h"
+#include "vf-core.h"
 #include <libavutil/imgutils.h>
 
 #define FRAME_ALIGN 16
 
 static void
-planes_to_jpeg(AiluroThumbnailer* thumbnailer,
+planes_to_jpeg(VfThumbnailer* thumbnailer,
               int quality,
               unsigned char** rdata,
               size_t* size);
 
 static int64_t
-frame_monotony(AiluroThumbnailer* thumbnailer, AVFrame* frame);
+frame_monotony(VfThumbnailer* thumbnailer, AVFrame* frame);
 
 void
-ailuro_thumbnailer_destroy(AiluroThumbnailer* thumbnailer)
+vf_thumbnailer_destroy(VfThumbnailer* thumbnailer)
 {
   unsigned n;
 //  jpeg_destroy_compress(&thumbnailer->compressor);
@@ -32,15 +32,15 @@ ailuro_thumbnailer_destroy(AiluroThumbnailer* thumbnailer)
   tjDestroy(thumbnailer->tjInstance);
 }
 
-static void set_tj_error(AiluroThumbnailer *thumbnailer) {
+static void set_tj_error(VfThumbnailer *thumbnailer) {
   thumbnailer->last_error = tjGetErrorCode(thumbnailer->tjInstance);
   strncpy(thumbnailer->last_error_str, tjGetErrorStr2(thumbnailer->tjInstance), sizeof(thumbnailer->last_error_str));
   DEBUG("JPEG error: %s\n", thumbnailer->last_error_str);
 }
 
 bool
-ailuro_thumbnailer_init(AiluroThumbnailer* thumbnailer,
-                        AiluroVideoFile* file,
+vf_thumbnailer_init(VfThumbnailer* thumbnailer,
+                        VfFile* file,
                         int width,
                         unsigned n)
 {
@@ -58,7 +58,7 @@ ailuro_thumbnailer_init(AiluroThumbnailer* thumbnailer,
   thumbnailer->n = n;
 
   DEBUG("OPEN CODEC\n");
-  ailuro_video_file_open_codec(file);
+  vf_file_open_codec(file);
   DEBUG("/OPEN CODEC\n");
 
   if (file->video_stream->sample_aspect_ratio.num &&
@@ -148,13 +148,13 @@ fail:
 }
 
 static void
-set_av_error(AiluroThumbnailer* thumbnailer, int error) {
+set_av_error(VfThumbnailer* thumbnailer, int error) {
     thumbnailer->last_error = error;
     av_strerror(error, thumbnailer->last_error_str, sizeof(thumbnailer->last_error_str));
 }
 
 bool
-ailuro_thumbnailer_get_frame(AiluroThumbnailer* thumbnailer,
+vf_thumbnailer_get_frame(VfThumbnailer* thumbnailer,
                              double seconds,
                              unsigned char** data,
                              size_t* size,
@@ -165,7 +165,7 @@ ailuro_thumbnailer_get_frame(AiluroThumbnailer* thumbnailer,
   AVFrame* frame;
   AVFormatContext* format_context;
   AVCodecContext* codec_context;
-  AiluroVideoFile* file = thumbnailer->video_file;
+  VfFile* file = thumbnailer->video_file;
 
   bool done = false;
   bool first_decoded_frame;
@@ -174,7 +174,7 @@ ailuro_thumbnailer_get_frame(AiluroThumbnailer* thumbnailer,
 
   fprintf(stderr, "FILTER MONOTONY: %d\n", filter_monoton);
 
-  ailuro_video_file_open_codec(file);
+  vf_file_open_codec(file);
 
   packet = &thumbnailer->packet;
 
@@ -319,7 +319,7 @@ fail:
 }
 
 static void
-planes_to_jpeg(AiluroThumbnailer* thumbnailer,
+planes_to_jpeg(VfThumbnailer* thumbnailer,
                int quality,
                unsigned char** rdata,
                size_t* size)
@@ -372,7 +372,7 @@ error:
 }
 
  static int64_t
- frame_monotony(AiluroThumbnailer *thumbnailer, AVFrame *frame)
+ frame_monotony(VfThumbnailer *thumbnailer, AVFrame *frame)
 {
   int64_t monotony;
 

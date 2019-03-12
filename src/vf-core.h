@@ -8,7 +8,7 @@
 #define DEBUG_FLAG
 
 void
-ailuro_core_init();
+vf_core_init();
 
 #define WARN(format, ...) fprintf(stderr, format, ##__VA_ARGS__)
 
