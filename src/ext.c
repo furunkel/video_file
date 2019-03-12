@@ -140,9 +140,10 @@ VALUE thumbnailer_m_initialize(VALUE self, VALUE rb_video_file, VALUE rb_width, 
     return self;
 }
 
-VALUE thumbnailer_m_get(VALUE self, VALUE rb_second, VALUE rb_filter_monoton) {
+VALUE thumbnailer_m_get(VALUE self, VALUE rb_second, VALUE rb_filter_monoton, VALUE rb_accurate) {
 
     bool filter_monoton = RB_TEST(rb_filter_monoton);
+    bool accurate = RB_TEST(rb_filter_monoton);
     double second = rb_num2dbl(rb_second);
 
     uint8_t *data = NULL;
@@ -151,14 +152,14 @@ VALUE thumbnailer_m_get(VALUE self, VALUE rb_second, VALUE rb_filter_monoton) {
     Thumbnailer *thumbnailer;
     TypedData_Get_Struct(self, Thumbnailer, &thumbnailer_type, thumbnailer);
 
-    ailuro_thumbnailer_get_frame(&thumbnailer->thumbnailer, second, &data, &size, filter_monoton);
+    bool succ = ailuro_thumbnailer_get_frame(&thumbnailer->thumbnailer, second, &data, &size, filter_monoton, accurate);
 
     if(size > 0 && data != NULL) {
       VALUE rb_data = rb_str_new((char *) data, size);
       free(data);
       return rb_data;
     } else {
-        rb_raise(rb_eArgError, "%s", thumbnailer->thumbnailer.last_error_str);
+        rb_raise(rb_eRuntimeError, "%s", thumbnailer->thumbnailer.last_error_str);
         return Qnil;
     }
 }
@@ -185,5 +186,5 @@ void Init_libvideo_file()
     VALUE cThumbnailer = rb_define_class_under(mAiluro, "Thumbnailer", rb_cData);
     rb_define_alloc_func(cThumbnailer, thumbnailer_alloc);
     rb_define_method(cThumbnailer, "initialize", thumbnailer_m_initialize, 3);
-    rb_define_method(cThumbnailer, "get", thumbnailer_m_get, 2);
+    rb_define_method(cThumbnailer, "get", thumbnailer_m_get, 3);
 }

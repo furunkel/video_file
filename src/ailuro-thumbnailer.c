@@ -153,12 +153,13 @@ set_av_error(AiluroThumbnailer* thumbnailer, int error) {
     av_strerror(error, thumbnailer->last_error_str, sizeof(thumbnailer->last_error_str));
 }
 
-int
+bool
 ailuro_thumbnailer_get_frame(AiluroThumbnailer* thumbnailer,
                              double seconds,
                              unsigned char** data,
                              size_t* size,
-                             int filter_monoton)
+                             bool filter_monoton,
+                             bool accurate)
 {
   AVPacket* packet;
   AVFrame* frame;
@@ -166,10 +167,8 @@ ailuro_thumbnailer_get_frame(AiluroThumbnailer* thumbnailer,
   AVCodecContext* codec_context;
   AiluroVideoFile* file = thumbnailer->video_file;
 
-  int done = 0;
-  int before_frame = 0;
-  int have_probe_packet = 0;
-
+  bool done = false;
+  bool first_decoded_frame;
   unsigned n = 0;
   int video_stream_index;
 
@@ -197,45 +196,33 @@ ailuro_thumbnailer_get_frame(AiluroThumbnailer* thumbnailer,
   int64_t video_position = av_rescale_q(position, AV_TIME_BASE_Q, file->video_stream->time_base);
   int64_t seek_position = video_position;
 
-reseek:;
+reseek: {
+    DEBUG("seeking to %ld...\n", seek_position);
+    int ret = avformat_seek_file(format_context,
+                               video_stream_index, //-1,
+                               0,
+                               seek_position,
+                               seek_position,
+                               0);
 
-  DEBUG( "RESEEK\n");
-
-  while (!before_frame) {
-      DEBUG("Seeking to : %ld %ld\n", position, position);
-      int ret = avformat_seek_file(format_context,
-                                   video_stream_index, //-1,
-                                   0,
-                                   seek_position,
-                                   seek_position,
-                                   0);
-      DEBUG("return: %d\n", ret);
-      //      position = MAX(0, position - keyint_length);
-
-      while (!have_probe_packet) {
-        int ret = av_read_frame(format_context, packet);
-        if (ret < 0) {
-          set_av_error(thumbnailer, ret);
-          goto fail;
-        }
-        have_probe_packet = (packet->stream_index == video_stream_index &&
-                             packet->pts != AV_NOPTS_VALUE);
-
-        DEBUG("probe_packet: %ld\n", packet->pts);
-        if (!have_probe_packet) {
-          av_packet_unref(packet);
-        }
-      }
-      /* Once reached this packet is the allocated probe packet*/
-      DEBUG("behind_frame packet: %ld <= %ld\n", packet->pts, video_position);
-      before_frame = packet->pts <= video_position;
+    if(ret < 0) {
+      DEBUG("seek_file error: %d", ret);
+      set_av_error(thumbnailer, ret);
+      goto fail;
+    }
   }
 
-  DEBUG("before frame found\n");
-  bool first_decoded_frame = true;
-  have_probe_packet = false;
+  first_decoded_frame = true;
 
-  while (before_frame && !done) {
+  while(!done) {
+
+    int ret = av_read_frame(format_context, packet);
+    if(ret < 0) {
+      DEBUG("read_frame error: %d\n", ret);
+      set_av_error(thumbnailer, ret);
+      goto fail;
+    }
+
     int64_t prev_packet_pts = AV_NOPTS_VALUE;
     if (packet->stream_index == video_stream_index) {
       int ret;
@@ -250,27 +237,27 @@ reseek:;
           }
       }
 
-        ret = avcodec_receive_frame(codec_context, frame);
-        if(ret < 0) {
-            if(ret == AVERROR(EAGAIN)) {
-              goto next_frame;
-            } else {
-              set_av_error(thumbnailer, ret);
-              goto fail;
-            }
-        }
+      ret = avcodec_receive_frame(codec_context, frame);
+      DEBUG("recv ret: %d (ts: %ld)\n", ret, packet->pts);
+      if(ret < 0) {
+          if(ret == AVERROR(EAGAIN)) {
+            goto next_frame;
+          } else {
+            set_av_error(thumbnailer, ret);
+            goto fail;
+          }
+      }
 
       if(packet->pts != AV_NOPTS_VALUE && packet->pts >= video_position) {
         DEBUG("possible decode frame %ld\n", packet->pts);
 
         if(first_decoded_frame) {
-            if(packet->pts > video_position && !(prev_packet_pts < video_position)) {
+            if(accurate && (packet->pts > video_position && !(prev_packet_pts < video_position))) {
               DEBUG("FIRST DECODED FRAME IS BEYOND target pos: %ld > %ld\n", packet->pts, video_position);
               int64_t seek_delta = av_rescale_q(5 * AV_TIME_BASE, AV_TIME_BASE_Q, file->video_stream->time_base);
               DEBUG("reseeking, old seek pos: %ld", seek_position);
               seek_position = MAX(0, seek_position - seek_delta);
               DEBUG("reseeking, new seek pos: %ld", seek_position);
-              before_frame = false;
               av_packet_unref(packet);
               avcodec_flush_buffers(codec_context);
               goto reseek;
@@ -317,13 +304,8 @@ reseek:;
 
   next_frame:
     av_packet_unref(packet);
-    if (!done) {
-      if (av_read_frame(format_context, packet) < 0) {
-        break;
-      }
-    }
-    //thumbnailer->position = packet->pts;
   }
+
   DEBUG("encoding as jpeg...\n\n\n");
 
   planes_to_jpeg(thumbnailer, 80, data, size);
@@ -388,119 +370,6 @@ error:
   *rdata = NULL;
   *size = 0;
 }
-
-// static void
-// frame_to_jpeg(AiluroThumbnailer *thumbnailer,
-//              int quality, unsigned char **rdata,
-//              size_t *size)
-//{
-
-//    clock_t c;
-//    c = clock();
-//    unsigned n;
-//    AVFrame *frame = NULL;
-
-//    /* 16 MCU size */
-//    size_t n_scanlines = 8;//DCTSIZE;
-//    struct jpeg_compress_struct *jc = &thumbnailer->compressor;
-
-////    JSAMPROW *y = alloca(sizeof(JSAMPROW) * n_scanlines);
-////    JSAMPROW *cb = alloca(sizeof(JSAMPROW) * n_scanlines);
-////    JSAMPROW *cr = alloca(sizeof(JSAMPROW) * n_scanlines);
-
-//    JSAMPROW y[n_scanlines],cb[n_scanlines ],cr[n_scanlines];
-//    JSAMPARRAY data[3];
-
-//    data[0] = y;
-//    data[1] = cb;
-//    data[2] = cr;
-
-//    thumbnailer->compressor.comp_info[0].h_samp_factor = 1;
-//    thumbnailer->compressor.comp_info[0].v_samp_factor = 1;
-//    thumbnailer->compressor.comp_info[1].h_samp_factor = 1;
-//    thumbnailer->compressor.comp_info[1].v_samp_factor = 1;
-//    thumbnailer->compressor.comp_info[2].h_samp_factor = 1;
-//    thumbnailer->compressor.comp_info[2].v_samp_factor = 1;
-//    thumbnailer->compressor.max_h_samp_factor = 1;
-//    thumbnailer->compressor.max_v_samp_factor = 1;
-
-//    jpeg_set_quality(jc, quality, TRUE);
-//    thumbnailer->compressor.dct_method = JDCT_FASTEST;
-
-//    jpeg_mem_dest(jc, rdata, size);
-//    jpeg_start_compress(jc, TRUE);
-
-//    size_t pixels_per_scanline = (size_t) (thumbnailer->n * (unsigned)
-//    thumbnailer->width);
-
-////    uint8_t **src_cursors = alloca(3 * (size_t) thumbnailer->n *
-/// sizeof(uint8_t *)); /    uint8_t *scanlines = alloca(3 * n_scanlines *
-/// pixels_per_scanline * sizeof(uint8_t));
-
-//    uint8_t *src_cursors[3][thumbnailer->n];
-//    uint8_t scanlines[3][n_scanlines][pixels_per_scanline];
-
-//    for(n = 0; n < thumbnailer->n; n++)
-//    {
-//       frame = thumbnailer->scaled_frames[n];
-////       *(src_cursors + 0 * thumbnailer->n  + n) = frame->data[0];
-////       *(src_cursors + 1 * thumbnailer->n + n) = frame->data[1];
-////       *(src_cursors + 2 * thumbnailer->n + n) = frame->data[2];
-//       src_cursors[0][n] = frame->data[0];
-//       src_cursors[1][n] = frame->data[1];
-//       src_cursors[2][n] = frame->data[2];
-
-//    }
-
-//    size_t plane;
-//    size_t n_scanline_blocks = thumbnailer->compressor.image_height /
-//    n_scanlines; size_t scanline_block; size_t scanline; uint8_t
-//    *scanline_ptr;
-
-//    int a = 0;
-
-//    for(scanline_block = 0; scanline_block < n_scanline_blocks;
-//    scanline_block++)
-//    {
-//      for(plane = 0; plane < 3; plane++)
-//      {
-//      	for(scanline = 0; scanline < n_scanlines; scanline++)
-//        {
-////          scanline_ptr = scanlines + plane * n_scanlines *
-/// pixels_per_scanline + scanline * pixels_per_scanline;
-//                  scanline_ptr = scanlines[plane][scanline];
-//          for(n = 0; n < thumbnailer->n; n++)
-//          {
-
-////            memcpy(scanline_ptr, (src_cursors + plane * thumbnailer->n + n),
-///(size_t) thumbnailer->width);
-//            //scanline_ptr += thumbnailer->width;
-////            *(src_cursors + plane * thumbnailer->n + n) +=
-/// thumbnailer->width; //frame->linesize[plane];
-
-//            memcpy(scanline_ptr, src_cursors[plane][n], thumbnailer->width);
-//            scanline_ptr += thumbnailer->width;
-//            src_cursors[plane][n] += thumbnailer->width;
-//            //frame->linesize[plane];
-//          }
-////          data[plane][scanline] = scanlines + plane * n_scanlines *
-/// pixels_per_scanline + scanline * pixels_per_scanline;
-//          data[plane][scanline] = scanlines[plane][scanline];
-//        }
-//      }
-//      jpeg_write_raw_data(jc, data, (JDIMENSION) n_scanlines);
-//      a+= 16;
-//      DEBUG("a = %d\n", n_scanlines);
-//      DEBUG("%d %d\n", jc->next_scanline, jc->image_height);
-//    }
-
-//    DEBUG("a = %d\n", a);
-//    DEBUG("%d %d\n", jc->next_scanline, jc->image_height);
-
-//    jpeg_finish_compress(jc);
-
-//    DEBUG("to jpeg: %lf\n", (double)(clock() - c) / CLOCKS_PER_SEC);
-//}
 
  static int64_t
  frame_monotony(AiluroThumbnailer *thumbnailer, AVFrame *frame)

@@ -41,12 +41,13 @@ struct _AiluroThumbnailer
 bool
 ailuro_thumbnailer_init(AiluroThumbnailer *thumbnailer, AiluroVideoFile* file, int width, unsigned n);
 
-int
+bool
 ailuro_thumbnailer_get_frame(AiluroThumbnailer* thumbnailer,
                              double seconds,
                              unsigned char** data,
                              size_t* size,
-                             int filter_monoton);
+                             bool filter_monoton,
+                             bool accurate);
 
 void
 ailuro_thumbnailer_destroy(AiluroThumbnailer* thumbnailer);
