@@ -173,7 +173,7 @@ VALUE thumbnailer_m_get__(VALUE self, VALUE rb_second, VALUE rb_accurate, VALUE 
 }
 
 
-void Init_libvideo_file()
+void Init_video_file_ext()
 {
     /* ... */
 
