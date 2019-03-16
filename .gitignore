@@ -71,3 +71,14 @@ Thumbs.db
 *.dll
 *.exe
 /build-Desktop-Default
+/build-Desktop-Debug
+
+/.bundle/
+/.yardoc
+/_yardoc/
+/coverage/
+/doc/
+/pkg/
+/spec/reports/
+/tmp/
+

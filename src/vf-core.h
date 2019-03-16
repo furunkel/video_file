@@ -1,29 +1,13 @@
 #pragma once
 
-#include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
-#include <libswscale/swscale.h>
-//#include <glib.h>
+#define VF_WARN(format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
 
-#define DEBUG_FLAG
+#define VF_ENABLE_DEBUG
 
-void
-vf_core_init();
-
-#define WARN(format, ...) fprintf(stderr, format, ##__VA_ARGS__)
-
-#ifdef DEBUG_FLAG
-#define DEBUG(format, ...) fprintf(stderr, format, ##__VA_ARGS__)
+#ifdef VF_ENABLE_DEBUG
+#define VF_DEBUG(format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
 #else
-#define DEBUG(format, ...)
-#endif
-
-#ifndef FALSE
-#define FALSE 0
-#endif
-
-#ifndef TRUE
-#define TRUE 1
+#define VF_DEBUG(format, ...)
 #endif
 
 #ifndef ABS

@@ -13,15 +13,50 @@ planes_to_jpeg(VfThumbnailer* thumbnailer,
 static int64_t
 frame_monotony(VfThumbnailer* thumbnailer, AVFrame* frame);
 
+static bool
+vf_file_open_codec(VfFile *video_file, VfThumbnailer *thumbnailer)
+{
+  AVCodec *codec;
+  int ret;
+
+  VF_DEBUG( "CODEC MUTEX");
+  pthread_mutex_lock(&video_file->codec_mutex);
+  VF_DEBUG( "CODEC MUTEX LOCKED");
+  if(video_file->video_codec_context->codec == NULL)
+  {
+    VF_DEBUG( "FIND DECODER");
+    codec = avcodec_find_decoder(video_file->video_codec_context->codec_id);
+    VF_DEBUG( "/FIND DECODER");
+    if(codec == NULL)
+    {
+      VF_DEBUG( "Could not find codec");
+      return false;
+    }
+
+    VF_DEBUG( "OPEN CODEC");
+    if((ret = avcodec_open2(video_file->video_codec_context, codec, NULL)) < 0)
+    {
+      VF_DEBUG( "Could not open codec (%d)\n", ret);
+      VF_SET_AV_ERROR(thumbnailer, ret);
+      return false;
+    }
+    VF_DEBUG( "/OPEN CODEC");
+  }
+  pthread_mutex_unlock(&video_file->codec_mutex);
+  return true;
+}
+
 void
 vf_thumbnailer_destroy(VfThumbnailer* thumbnailer)
 {
   unsigned n;
 //  jpeg_destroy_compress(&thumbnailer->compressor);
 
-  for (n = 0; n < thumbnailer->n; n++) {
-    //    free(thumbnailer->scaled_frames[n]->data);
-    av_frame_free(&thumbnailer->scaled_frames[n]);
+  if(thumbnailer->scaled_frames != NULL) {
+    for (n = 0; n < thumbnailer->n; n++) {
+      //    free(thumbnailer->scaled_frames[n]->data);
+      av_frame_free(&thumbnailer->scaled_frames[n]);
+    }
   }
   av_frame_free(&thumbnailer->frame);
   av_frame_free(&thumbnailer->joined_frame);
@@ -35,7 +70,7 @@ vf_thumbnailer_destroy(VfThumbnailer* thumbnailer)
 static void set_tj_error(VfThumbnailer *thumbnailer) {
   thumbnailer->last_error = tjGetErrorCode(thumbnailer->tjInstance);
   strncpy(thumbnailer->last_error_str, tjGetErrorStr2(thumbnailer->tjInstance), sizeof(thumbnailer->last_error_str));
-  DEBUG("JPEG error: %s\n", thumbnailer->last_error_str);
+  VF_DEBUG("JPEG error: %s\n", thumbnailer->last_error_str);
 }
 
 bool
@@ -57,9 +92,13 @@ vf_thumbnailer_init(VfThumbnailer* thumbnailer,
 
   thumbnailer->n = n;
 
-  DEBUG("OPEN CODEC\n");
-  vf_file_open_codec(file);
-  DEBUG("/OPEN CODEC\n");
+  VF_DEBUG("OPEN CODEC");
+
+  if(!vf_file_open_codec(file, thumbnailer)) {
+      return false;
+  }
+
+  VF_DEBUG("/OPEN CODEC");
 
   if (file->video_stream->sample_aspect_ratio.num &&
       av_cmp_q(file->video_stream->sample_aspect_ratio,
@@ -96,7 +135,7 @@ vf_thumbnailer_init(VfThumbnailer* thumbnailer,
                                         NULL);
 
   if (thumbnailer->sws_ctx == NULL) {
-    DEBUG("Could not create sws context\n");
+    VF_DEBUG("Could not create sws context");
     goto fail;
   }
 
@@ -140,17 +179,11 @@ vf_thumbnailer_init(VfThumbnailer* thumbnailer,
     goto fail;
   }
 
-  return thumbnailer;
+  return true;
 
 fail:
-  DEBUG("Thumbnailer creation failed\n");
-  return NULL;
-}
-
-static void
-set_av_error(VfThumbnailer* thumbnailer, int error) {
-    thumbnailer->last_error = error;
-    av_strerror(error, thumbnailer->last_error_str, sizeof(thumbnailer->last_error_str));
+  VF_DEBUG("Thumbnailer creation failed");
+  return false;
 }
 
 bool
@@ -158,8 +191,8 @@ vf_thumbnailer_get_frame(VfThumbnailer* thumbnailer,
                              double seconds,
                              unsigned char** data,
                              size_t* size,
-                             bool filter_monoton,
-                             bool accurate)
+                             bool accurate,
+                             bool filter_monoton)
 {
   AVPacket* packet;
   AVFrame* frame;
@@ -172,9 +205,12 @@ vf_thumbnailer_get_frame(VfThumbnailer* thumbnailer,
   unsigned n = 0;
   int video_stream_index;
 
-  fprintf(stderr, "FILTER MONOTONY: %d\n", filter_monoton);
+  VF_DEBUG("FILTER MONOTONY: %d", filter_monoton);
 
-  vf_file_open_codec(file);
+  if(!vf_file_open_codec(file, thumbnailer)) {
+      VF_DEBUG("opening codec failed");
+      goto fail;
+  }
 
   packet = &thumbnailer->packet;
 
@@ -197,7 +233,7 @@ vf_thumbnailer_get_frame(VfThumbnailer* thumbnailer,
   int64_t seek_position = video_position;
 
 reseek: {
-    DEBUG("seeking to %ld...\n", seek_position);
+    VF_DEBUG("seeking to %ld...\n", seek_position);
     int ret = avformat_seek_file(format_context,
                                video_stream_index, //-1,
                                0,
@@ -206,8 +242,8 @@ reseek: {
                                0);
 
     if(ret < 0) {
-      DEBUG("seek_file error: %d", ret);
-      set_av_error(thumbnailer, ret);
+      VF_DEBUG("seek_file error: %d", ret);
+      VF_SET_AV_ERROR(thumbnailer, ret);
       goto fail;
     }
   }
@@ -218,8 +254,8 @@ reseek: {
 
     int ret = av_read_frame(format_context, packet);
     if(ret < 0) {
-      DEBUG("read_frame error: %d\n", ret);
-      set_av_error(thumbnailer, ret);
+      VF_DEBUG("read_frame error: %d", ret);
+      VF_SET_AV_ERROR(thumbnailer, ret);
       goto fail;
     }
 
@@ -227,37 +263,37 @@ reseek: {
     if (packet->stream_index == video_stream_index) {
       int ret;
       ret = avcodec_send_packet(codec_context, packet);
-      DEBUG("send ret: %d (ts: %ld)\n", ret, packet->pts);
+      VF_DEBUG("send ret: %d (ts: %ld)\n", ret, packet->pts);
       if(ret < 0) {
           if(ret == AVERROR(EAGAIN) || ret == AVERROR_INVALIDDATA) {
             goto next_frame;
           } else {
-            set_av_error(thumbnailer, ret);
+            VF_SET_AV_ERROR(thumbnailer, ret);
             goto fail;
           }
       }
 
       ret = avcodec_receive_frame(codec_context, frame);
-      DEBUG("recv ret: %d (ts: %ld)\n", ret, packet->pts);
+      VF_DEBUG("recv ret: %d (ts: %ld)\n", ret, packet->pts);
       if(ret < 0) {
           if(ret == AVERROR(EAGAIN)) {
             goto next_frame;
           } else {
-            set_av_error(thumbnailer, ret);
+            VF_SET_AV_ERROR(thumbnailer, ret);
             goto fail;
           }
       }
 
       if(packet->pts != AV_NOPTS_VALUE && packet->pts >= video_position) {
-        DEBUG("possible decode frame %ld\n", packet->pts);
+        VF_DEBUG("possible decode frame %ld\n", packet->pts);
 
         if(first_decoded_frame) {
             if(accurate && (packet->pts > video_position && !(prev_packet_pts < video_position))) {
-              DEBUG("FIRST DECODED FRAME IS BEYOND target pos: %ld > %ld\n", packet->pts, video_position);
+              VF_DEBUG("FIRST DECODED FRAME IS BEYOND target pos: %ld > %ld\n", packet->pts, video_position);
               int64_t seek_delta = av_rescale_q(5 * AV_TIME_BASE, AV_TIME_BASE_Q, file->video_stream->time_base);
-              DEBUG("reseeking, old seek pos: %ld", seek_position);
+              VF_DEBUG("reseeking, old seek pos: %ld", seek_position);
               seek_position = MAX(0, seek_position - seek_delta);
-              DEBUG("reseeking, new seek pos: %ld", seek_position);
+              VF_DEBUG("reseeking, new seek pos: %ld", seek_position);
               av_packet_unref(packet);
               avcodec_flush_buffers(codec_context);
               goto reseek;
@@ -265,11 +301,11 @@ reseek: {
               first_decoded_frame = false;
             }
         }
-        DEBUG("recv ret: %d\n", ret);
+        VF_DEBUG("recv ret: %d\n", ret);
 
         clock_t c = clock();
-        DEBUG("decode: %lf\n", (double)(clock() - c) / CLOCKS_PER_SEC);
-        DEBUG("GOT_FRAME! (%d/%d): %ld\n", n, thumbnailer->n, frame->pts);
+        VF_DEBUG("decode: %lf\n", (double)(clock() - c) / CLOCKS_PER_SEC);
+        VF_DEBUG("GOT_FRAME! (%d/%d): %ld\n", n, thumbnailer->n, frame->pts);
 
         sws_scale(thumbnailer->sws_ctx,
                   (const uint8_t* const*)frame->data,
@@ -279,12 +315,12 @@ reseek: {
                   (uint8_t* const*)thumbnailer->scaled_frames[n]->data,
                   thumbnailer->scaled_frames[n]->linesize);
 
-        DEBUG("scale: %lf\n", (double)(clock() - c) / CLOCKS_PER_SEC);
+        VF_DEBUG("scale: %lf\n", (double)(clock() - c) / CLOCKS_PER_SEC);
 
         if (filter_monoton) {
           int64_t monotony =
             frame_monotony(thumbnailer, thumbnailer->scaled_frames[n]);
-          DEBUG("MONOTONY: %ld\n", monotony);
+          VF_DEBUG("MONOTONY: %ld\n", monotony);
 
           if (monotony < 40000 && frames_not_taken_because_of_monoty < 125) {
             frames_not_taken_because_of_monoty++;
@@ -294,7 +330,7 @@ reseek: {
 
         frames_not_taken_because_of_monoty = 0;
         n++;
-        DEBUG("FRAMES: %u/%u\n", n, thumbnailer->n);
+        VF_DEBUG("FRAMES: %u/%u\n", n, thumbnailer->n);
         if (n == thumbnailer->n) {
           done = 1;
         }
@@ -306,16 +342,16 @@ reseek: {
     av_packet_unref(packet);
   }
 
-  DEBUG("encoding as jpeg...\n\n\n");
+  VF_DEBUG("encoding as jpeg...\n");
 
   planes_to_jpeg(thumbnailer, 80, data, size);
 
-  return TRUE;
+  return true;
 
 fail:
   *data = NULL;
   *size = 0;
-  return FALSE;
+  return false;
 }
 
 static void
@@ -333,7 +369,6 @@ planes_to_jpeg(VfThumbnailer* thumbnailer,
   // join frames
 
   for (unsigned i = 0; i < 3; i++) {
-    size_t off = 0;
     for (unsigned j = 0; j < thumbnailer->n; j++) {
       av_image_copy_plane(thumbnailer->joined_frame->data[i] + j * (unsigned) thumbnailer->width,
                           thumbnailer->joined_frame->linesize[i],
@@ -341,18 +376,16 @@ planes_to_jpeg(VfThumbnailer* thumbnailer,
                           thumbnailer->scaled_frames[j]->linesize[i],
                           thumbnailer->width,
                           thumbnailer->height);
-
-      off += thumbnailer->width * thumbnailer->height;
     }
   }
 
-  const unsigned char** planes = (const unsigned char **) thumbnailer->joined_frame->data;
+  const unsigned char** planes = (unsigned char **) thumbnailer->joined_frame->data;
   int* strides = thumbnailer->joined_frame->linesize;
   *rdata = NULL;
 
   int error = tjCompressFromYUVPlanes(tjInstance,
                                       planes,
-                                      (int) (thumbnailer->n * thumbnailer->width),
+                                      (int)thumbnailer->n * thumbnailer->width,
                                       strides,
                                       thumbnailer->height,
                                       TJSAMP_444,

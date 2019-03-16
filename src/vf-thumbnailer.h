@@ -9,7 +9,7 @@
 #include <pthread.h>
 #include <turbojpeg.h>
 
-#include "vf-video-file.h"
+#include "vf-file.h"
 
 typedef struct _VfThumbnailer VfThumbnailer;
 
@@ -46,8 +46,9 @@ vf_thumbnailer_get_frame(VfThumbnailer* thumbnailer,
                              double seconds,
                              unsigned char** data,
                              size_t* size,
-                             bool filter_monoton,
-                             bool accurate);
+                             bool accurate,
+                             bool filter_monoton
+                         );
 
 void
 vf_thumbnailer_destroy(VfThumbnailer* thumbnailer);
