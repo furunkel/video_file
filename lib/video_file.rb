@@ -10,7 +10,7 @@ module VideoFile
     # @param filter [Boolean] whether to filter out black, white and monton frames
     # @return [String] JPEG-encoded thumbnail
     def get(position, accurate: false, filter: false)
-      get__(position, accurate, filter_monoton)
+      get__(position, accurate, filter)
     end
   end
 end

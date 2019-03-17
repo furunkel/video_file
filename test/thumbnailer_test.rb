@@ -3,8 +3,8 @@ require "test_helper"
 module VideoFile
   class ThumbnailerTest < Minitest::Test
     def test_nil_file
-      error = assert_raises TypeError do
-        thumbnailer = VideoFile::Thumbnailer.new nil, 10, 10
+      assert_raises TypeError do
+        VideoFile::Thumbnailer.new nil, 10, 10
       end
     end
 

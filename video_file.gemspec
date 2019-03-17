@@ -8,6 +8,7 @@ Gem::Specification.new do |spec|
   spec.version       = VideoFile::VERSION
   spec.authors       = ["furunkel"]
   spec.email         = ["furunkel@polyadic.com"]
+  spec.license       = "GPL"
 
   spec.summary       = %q{Get video metadata and create thumbnails}
   spec.homepage      = "https://www.github.com/furunkel/video_file"

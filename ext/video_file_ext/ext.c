@@ -138,7 +138,7 @@ VALUE thumbnailer_m_initialize(int argc, VALUE* argv, VALUE self)
     VALUE file = Qnil;
     VALUE width = Qnil;
     VALUE count = INT2FIX(1);
-    rb_scan_args(argc, argv, "21", &file, &count);
+    rb_scan_args(argc, argv, "21", &file, &width, &count);
 
     Check_TypedStruct(file, &file_type);
 
