@@ -83,14 +83,7 @@ vf_thumbnailer_init(VfThumbnailer* thumbnailer,
   int height;
   size_t buffer_size;
 
-  thumbnailer->video_file = file;
-  thumbnailer->width = width;
-  thumbnailer->position = -1;
 
-  if (n <= 0)
-    n = 1;
-
-  thumbnailer->n = n;
 
   VF_DEBUG("OPEN CODEC");
 
@@ -99,6 +92,16 @@ vf_thumbnailer_init(VfThumbnailer* thumbnailer,
   }
 
   VF_DEBUG("/OPEN CODEC");
+
+  if(width <= 0) {
+      width = file->video_codec_context->width;
+  }
+
+  thumbnailer->video_file = file;
+  thumbnailer->width = width;
+  thumbnailer->position = -1;
+  thumbnailer->n = n;
+
 
   if (file->video_stream->sample_aspect_ratio.num &&
       av_cmp_q(file->video_stream->sample_aspect_ratio,
@@ -114,9 +117,10 @@ vf_thumbnailer_init(VfThumbnailer* thumbnailer,
               file->video_codec_context->height) /
              (file->video_stream->sample_aspect_ratio.num *
               file->video_codec_context->width);
-  } else
+  } else {
     /* Fallback to 16:9 */
     height = (int)(width / 1.7777);
+  }
 
   //  height = size *
   //  format_context->streams[thumbnailer->video_stream_index]->sample_aspect_ratio.den

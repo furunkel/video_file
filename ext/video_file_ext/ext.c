@@ -34,13 +34,16 @@ VALUE file_alloc(VALUE self)
     return TypedData_Wrap_Struct(self, &file_type, file);
 }
 
-VALUE file_m_initialize(VALUE self, VALUE path)
+/*
+ * @param filename [String] filename of a video file
+ */
+VALUE file_m_initialize(VALUE self, VALUE filename)
 {
-    Check_Type(path, T_STRING);
+    Check_Type(filename, T_STRING);
 
     VfFile *file;
     TypedData_Get_Struct(self, VfFile, &file_type, file);
-    if(!vf_file_init(file, StringValueCStr(path))) {
+    if(!vf_file_init(file, StringValueCStr(filename))) {
         rb_raise(eError, "%s", file->last_error_str);
     }
     return self;
@@ -124,19 +127,30 @@ VALUE thumbnailer_alloc(VALUE self)
     return TypedData_Wrap_Struct(self, &thumbnailer_type, thumbnailer);
 }
 
-VALUE thumbnailer_m_initialize(VALUE self, VALUE rb_file, VALUE rb_width, VALUE rb_n)
+/*
+ * @overload initialze(file, width, count = 1)
+ *   @param file [VideoFile::File] a video file
+ *   @param width [Numeric] the desired width (pixels) of generated thumbnails
+ *   @param count [Integer] the number of frames per thumbnail (concatenated horizontally)
+ */
+VALUE thumbnailer_m_initialize(int argc, VALUE* argv, VALUE self)
 {
-    Check_TypedStruct(rb_file, &file_type);
+    VALUE file = Qnil;
+    VALUE width = Qnil;
+    VALUE count = INT2FIX(1);
+    rb_scan_args(argc, argv, "21", &file, &count);
+
+    Check_TypedStruct(file, &file_type);
 
     Thumbnailer *thumbnailer;
-    VfFile *file;
+    VfFile *file_;
     TypedData_Get_Struct(self, Thumbnailer, &thumbnailer_type, thumbnailer);
-    TypedData_Get_Struct(rb_file, VfFile, &file_type, file);
+    TypedData_Get_Struct(file, VfFile, &file_type, file_);
 
-    int width = FIX2INT(rb_width);
-    unsigned n = FIX2UINT(rb_n);
+    int width_ = FIX2INT(width);
+    unsigned n_ = FIX2UINT(count);
 
-    if(!vf_thumbnailer_init(&thumbnailer->thumbnailer, file, width, n)) {
+    if(!vf_thumbnailer_init(&thumbnailer->thumbnailer, file_, width_, n_)) {
         rb_raise(eError, "%s", thumbnailer->thumbnailer.last_error_str);
     }
     return self;
@@ -184,18 +198,46 @@ void Init_video_file_ext()
     rb_define_alloc_func(cFile, file_alloc);
     rb_define_method(cFile, "initialize", file_m_initialize, 1);
 
+    /*
+     * @return [Float] the video's duration (in seconds)
+    */
     rb_define_method(cFile, "duration", file_m_duration, 0);
+
+    /*
+     * @return [Float] the video's frame rate (FPS, frames per second)
+    */
     rb_define_method(cFile, "fps", file_m_fps, 0);
+    rb_define_alias(cFile, "frame_frate", "fps");
+
+
+    /*
+     * @return [Float] the video's aspect ratio
+    */
     rb_define_method(cFile, "dar", file_m_dar, 0);
+    rb_define_alias(cFile, "aspect_ratio", "dar");
+
     rb_define_method(cFile, "par", file_m_par, 0);
 
+    /*
+     * @return [Numeric] the video's width (in pixels)
+    */
     rb_define_method(cFile, "width", file_m_width, 0);
+
+    /*
+     * @return [Numeric] the video's height (in pixels)
+    */
     rb_define_method(cFile, "height", file_m_height, 0);
 
 
     VALUE cThumbnailer = rb_define_class_under(mVideoFile, "Thumbnailer", rb_cData);
     rb_define_alloc_func(cThumbnailer, thumbnailer_alloc);
-    rb_define_method(cThumbnailer, "initialize", thumbnailer_m_initialize, 3);
+    rb_define_method(cThumbnailer, "initialize", thumbnailer_m_initialize, -1);
+
+
+    /*
+     * @return [VideoFile::File] the file associated with this thumbnailer
+    */
     rb_define_method(cThumbnailer, "file", thumbnailer_m_file, 0);
+
     rb_define_private_method(cThumbnailer, "get__", thumbnailer_m_get__, 3);
 }

@@ -1,5 +1,6 @@
 require "bundler/gem_tasks"
 require "rake/testtask"
+require "yard"
 
 Rake::TestTask.new(:test) do |t|
   t.libs << "test"
@@ -11,3 +12,5 @@ require 'rake/extensiontask'
 Rake::ExtensionTask.new('video_file_ext')
 
 task :default => :test
+
+YARD::Rake::YardocTask.new

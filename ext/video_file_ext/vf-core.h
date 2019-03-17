@@ -2,8 +2,6 @@
 
 #define VF_WARN(format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
 
-#define VF_ENABLE_DEBUG
-
 #ifdef VF_ENABLE_DEBUG
 #define VF_DEBUG(format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
 #else

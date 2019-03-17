@@ -63,7 +63,7 @@ vf_file_init(VfFile *video_file, const char *filename)
   if((ret = avformat_open_input(&format_context, filename, NULL, NULL)) != 0)
   {
     VF_SET_AV_ERROR(video_file, ret);
-    VF_WARN( "av_open_input_file (%s, %d)\n", filename, ret);
+    VF_DEBUG("av_open_input_file (%s, %d)\n", filename, ret);
     goto fail;
   }
 
@@ -118,7 +118,7 @@ vf_file_init(VfFile *video_file, const char *filename)
   return true;
 
 fail:
-  VF_WARN( "VideoFile creation failed");
+  VF_DEBUG( "VideoFile creation failed");
   return false;
 
 }
