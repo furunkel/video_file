@@ -1,10 +1,15 @@
+[![Yard Docs](http://img.shields.io/badge/yard-docs-blue.svg)](http://rubydoc.info/github/furunkel/video_file/master/frames)
+
 # VideoFile
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/video_file`. To experiment with that code, run `bin/console` for an interactive prompt.
-
-TODO: Delete this and the text above, and describe your gem
+A simple gem for generating video thumbnails.
 
 ## Installation
+
+Install FFMPEG and TurboJPEG. For Ubuntu/Debian:
+```
+$ sudo apt install libavcodec-dev libavformat-dev libturbojpeg0-dev
+```
 
 Add this line to your application's Gemfile:
 
@@ -22,7 +27,15 @@ Or install it yourself as:
 
 ## Usage
 
-TODO: Write usage instructions here
+```ruby
+file = VideoFile::File.new 'video.mp4'
+puts file.duration
+
+thumbnailer = VideoFile::Thumbnailer.new file, 128
+jpeg_data = thumbnailer.get 3.0
+File.write('thumbnail.jpg', jpeg_data)
+```
+
 
 ## Development
 
@@ -32,4 +45,4 @@ To install this gem onto your local machine, run `bundle exec rake install`. To 
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/video_file.
+Bug reports and pull requests are welcome on GitHub at https://github.com/furunkel/video_file.
