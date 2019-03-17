@@ -137,7 +137,7 @@ VALUE thumbnailer_m_initialize(int argc, VALUE* argv, VALUE self)
 {
     VALUE file = Qnil;
     VALUE width = Qnil;
-    VALUE count = INT2FIX(1);
+    VALUE count = Qnil;
     rb_scan_args(argc, argv, "21", &file, &width, &count);
 
     Check_TypedStruct(file, &file_type);
@@ -148,7 +148,7 @@ VALUE thumbnailer_m_initialize(int argc, VALUE* argv, VALUE self)
     TypedData_Get_Struct(file, VfFile, &file_type, file_);
 
     int width_ = FIX2INT(width);
-    unsigned n_ = FIX2UINT(count);
+    unsigned n_ = count == Qnil ? 1 : FIX2UINT(count);
 
     if(!vf_thumbnailer_init(&thumbnailer->thumbnailer, file_, width_, n_)) {
         rb_raise(eError, "%s", thumbnailer->thumbnailer.last_error_str);
