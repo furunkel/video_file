@@ -97,6 +97,10 @@ vf_thumbnailer_init(VfThumbnailer* thumbnailer,
       width = file->video_codec_context->width;
   }
 
+  if(n == 0) {
+      n = 1;
+  }
+
   thumbnailer->video_file = file;
   thumbnailer->width = width;
   thumbnailer->position = -1;
@@ -225,6 +229,8 @@ vf_thumbnailer_get_frame(VfThumbnailer* thumbnailer,
 
   int64_t position = (int64_t)(AV_TIME_BASE * seconds);
   if (format_context->duration < position || position < 0) {
+    VF_DEBUG("invalid position %ld (duration is: %ld)\n", position, format_context->duration);
+    strncpy(thumbnailer->last_error_str, "invalid position", sizeof(thumbnailer->last_error_str));
     goto fail;
   }
 

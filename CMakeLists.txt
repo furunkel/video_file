@@ -23,6 +23,6 @@ add_library(video_file_ext SHARED ${SOURCE_FILES})
 
 set_target_properties(video_file_ext PROPERTIES PREFIX "")
 set_target_properties(video_file_ext PROPERTIES LIBRARY_OUTPUT_DIRECTORY  "${PROJECT_SOURCE_DIR}/lib")
-target_compile_definitions(video_file_ext PRIVATE AV_ENABLE_DEBUG)
+target_compile_definitions(video_file_ext PRIVATE VF_ENABLE_DEBUG)
 target_include_directories(video_file_ext PRIVATE ${RUBY_INCLUDE_DIRS})
 target_link_libraries(video_file_ext ${LIBAV_LIBRARIES} ${JPEG_LIBRARIES} ${RUBY_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
