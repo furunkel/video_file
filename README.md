@@ -8,7 +8,7 @@ A simple gem for generating video thumbnails.
 
 Install FFMPEG and TurboJPEG. For Ubuntu/Debian:
 ```
-$ sudo apt install libavcodec-dev libavformat-dev libturbojpeg0-dev
+$ sudo apt install libavcodec-dev libavformat-dev libturbojpeg0-dev libswscale-dev
 ```
 
 Add this line to your application's Gemfile:
