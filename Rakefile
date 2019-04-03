@@ -9,7 +9,7 @@ Rake::TestTask.new(:test) do |t|
 end
 
 require 'rake/extensiontask'
-Rake::ExtensionTask.new('video_file_ext')
+Rake::ExtensionTask.new('video_file_native')
 
 task :default => :test
 

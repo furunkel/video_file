@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include <ruby.h>
 #include "vf-file.h"
 #include "vf-thumbnailer.h"
@@ -187,9 +188,9 @@ VALUE thumbnailer_m_get__(VALUE self, VALUE rb_second, VALUE rb_accurate, VALUE 
 }
 
 
-void Init_video_file_ext()
+void Init_video_file_native()
 {
-    /* ... */
+    vf_init();
 
     VALUE mVideoFile = rb_define_module("VideoFile");
     VALUE cFile = rb_define_class_under(mVideoFile, "File", rb_cData);

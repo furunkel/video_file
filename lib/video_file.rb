@@ -1,5 +1,5 @@
 require 'video_file/version'
-require 'video_file_ext'
+require 'video_file_native'
 
 module VideoFile
   class Thumbnailer
